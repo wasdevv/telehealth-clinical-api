@@ -1,0 +1,20 @@
+# sidekiq-cron entries, loaded on Sidekiq server startup. All expressions are UTC,
+# because config.time_zone is UTC; the small hours were picked so the sweeps never
+# compete with a consultation.
+daily_no_show_sweep:
+  cron: "15 3 * * *"
+  class: "DailyNoShowSweeper"
+  queue: maintenance
+  description: "Close out appointments whose time passed while still unconfirmed"
+
+billing_reconciliation:
+  cron: "45 3 * * *"
+  class: "BillingReconciliationWorker"
+  queue: maintenance
+  description: "Re-assert an invoice for every recent active appointment (idempotent)"
+
+expired_token_sweep:
+  cron: "0 4 * * *"
+  class: "ExpiredTokenSweeper"
+  queue: maintenance
+  description: "Delete denylist rows whose tokens have expired anyway"

@@ -1,7 +1,7 @@
 # Active Record Encryption and the JWT signing key have no safe default. Outside
 # development and test the process refuses to boot without them, so a missing
 # secret is a loud crash at deploy time instead of a silently unprotected column.
-REQUIRED_SECRETS = %w[
+required_secrets = %w[
   ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
   ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY
   ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
@@ -11,7 +11,7 @@ REQUIRED_SECRETS = %w[
 Rails.application.config.to_prepare do
   next if Rails.env.local?
 
-  missing = REQUIRED_SECRETS.select { |key| ENV[key].blank? }
+  missing = required_secrets.select { |key| ENV[key].blank? }
   raise "Missing required secrets: #{missing.join(', ')}" if missing.any?
 end
 

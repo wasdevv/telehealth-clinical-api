@@ -1,0 +1,10 @@
+#!/bin/bash -e
+
+# Schema preparation belongs to exactly one process. The API container owns it; the
+# Sidekiq container waits for the API's healthcheck instead, so the two never race to
+# migrate the same database.
+if [ "${PREPARE_DATABASE}" = "true" ]; then
+  ./bin/rails db:prepare
+fi
+
+exec "${@}"

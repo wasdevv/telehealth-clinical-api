@@ -98,9 +98,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_01_000008) do
     t.index ["user_id"], name: "index_patients_on_user_id", unique: true
   end
 
-# Could not dump table "users" because of following ArgumentError
-#   wrong number of arguments (given 2, expected 1)
-
+  create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.string "encrypted_password", default: "", null: false
+    t.boolean "otp_enabled", default: false, null: false
+    t.datetime "otp_last_used_at"
+    t.string "otp_recovery_code_digests", default: [], null: false, array: true
+    t.text "otp_secret"
+    t.string "provider"
+    t.string "role", default: "patient", null: false
+    t.string "uid"
+    t.datetime "updated_at", null: false
+    t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true, where: "(provider IS NOT NULL)"
+    t.check_constraint "provider IS NULL AND uid IS NULL OR provider IS NOT NULL AND uid IS NOT NULL", name: "users_oauth_identity_complete_check"
+    t.check_constraint "role::text = ANY (ARRAY['patient'::character varying, 'doctor'::character varying, 'admin'::character varying]::text[])", name: "users_role_check"
+  end
 
   add_foreign_key "appointments", "availabilities"
   add_foreign_key "appointments", "doctors"

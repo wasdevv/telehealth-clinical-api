@@ -1,0 +1,7 @@
+# Named queues with explicit weights. Reminders are what a patient notices if it is late,
+# so they outrank invoice retries, which outrank the nightly maintenance sweeps.
+:concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 5) %>
+:queues:
+  - [notifications, 3]
+  - [default, 2]
+  - [maintenance, 1]

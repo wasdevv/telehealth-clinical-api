@@ -28,14 +28,17 @@ module TelehealthClinicalApi
     config.cache_store = :redis_cache_store, {
       url: ENV.fetch("REDIS_URL", "redis://localhost:6379/1"),
       namespace: "telehealth-clinical-api",
-      error_handler: ->(method:, returning:, exception:) { Rails.logger.warn("cache #{method} failed: #{exception.class}") }
+      error_handler: lambda { |method:, exception:, returning: nil|
+        # A cache outage must degrade the API, never stop it.
+        Rails.logger.warn("cache #{method} failed (returning #{returning.inspect}): #{exception.class}")
+      }
     }
 
     # Active Record Encryption protects PHI (MedicalRecord#notes, #diagnosis) and the
     # TOTP secret. Keys always come from the environment; they are never committed.
-    config.active_record.encryption.primary_key = ENV["ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"]
-    config.active_record.encryption.deterministic_key = ENV["ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY"]
-    config.active_record.encryption.key_derivation_salt = ENV["ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT"]
+    config.active_record.encryption.primary_key = ENV.fetch("ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY", nil)
+    config.active_record.encryption.deterministic_key = ENV.fetch("ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY", nil)
+    config.active_record.encryption.key_derivation_salt = ENV.fetch("ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT", nil)
 
     # OmniAuth's request phase needs a session to hold the OAuth state parameter, and
     # omniauth-rails_csrf_protection needs the CSRF token. API mode drops both by default.

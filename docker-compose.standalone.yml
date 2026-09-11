@@ -1,0 +1,92 @@
+# This service on its own. The clinical API expects telehealth-billing-service to answer
+# at http://billing:8000 — see the README for the compose file that runs both together.
+# Without it, invoice calls time out, which the booking path is built to survive: the
+# appointment is kept and the invoice is retried in the background.
+name: telehealth-clinical
+
+x-app: &app
+  build:
+    context: .
+  environment: &app-env
+    RAILS_ENV: production
+    RAILS_LOG_TO_STDOUT: "true"
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432/telehealth_clinical_api_production
+    REDIS_URL: redis://redis:6379/0
+    SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set SECRET_KEY_BASE in .env}
+    DEVISE_JWT_SECRET_KEY: ${DEVISE_JWT_SECRET_KEY:?set DEVISE_JWT_SECRET_KEY in .env}
+    ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY:?run bin/rails db:encryption:init}
+    ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: ${ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY:?run bin/rails db:encryption:init}
+    ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: ${ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT:?run bin/rails db:encryption:init}
+    GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    DJANGO_BILLING_URL: ${DJANGO_BILLING_URL:-http://billing:8000}
+    INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?shared with telehealth-billing-service}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  api:
+    <<: *app
+    environment:
+      <<: *app-env
+      # Only this container prepares the schema.
+      PREPARE_DATABASE: "true"
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  sidekiq:
+    <<: *app
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      # The slim image has no procps, so this reads PID 1's own command line
+      # straight out of procfs rather than shelling out to pgrep.
+      test: ["CMD-SHELL", "tr '\\0' ' ' < /proc/1/cmdline | grep -q sidekiq"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: telehealth_clinical_api_production
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d telehealth_clinical_api_production"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
