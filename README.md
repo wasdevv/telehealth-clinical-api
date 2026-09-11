@@ -70,24 +70,43 @@ contract documented below.
 
 ### Requirements
 
-Ruby 3.4.4, PostgreSQL 16, Redis 7. Or just Docker.
+Ruby 3.4.4 and Docker. PostgreSQL 16 and Redis 7 come from `docker-compose.dev.yml`; you
+do not need them installed.
 
-### Locally
+### Quick start
 
 ```bash
 bundle install
-cp .env.example .env
+cp .env.example .env                              # dotenv reads this in dev and test
 
-# Generate the secrets .env asks for:
-bin/rails secret                # SECRET_KEY_BASE, and again for DEVISE_JWT_SECRET_KEY
-bin/rails db:encryption:init    # the three ACTIVE_RECORD_ENCRYPTION_* keys
-
+docker compose -f docker-compose.dev.yml up -d    # PostgreSQL 16 + Redis 7
 bin/rails db:prepare
-bin/rails db:seed               # development only; refuses to run anywhere else
+bin/rails db:seed                                 # prints the demo accounts
 
-bin/rails server                                     # API on :3000
-bundle exec sidekiq -C config/sidekiq.yml            # workers, in a second terminal
+bin/rails server                                  # terminal 1 — API on :3000
+bundle exec sidekiq -C config/sidekiq.yml         # terminal 2 — three named queues
 ```
+
+Then, in a third terminal:
+
+```bash
+bin/smoke
+```
+
+`bin/smoke` walks the entire golden path against the running server and prints a pass or
+fail line per step: health, the closed door without a token, login, the doctor directory,
+booking, the rejected double booking, filing a clinical record, participant-only access to
+PHI, cancellation freeing the slot, token revocation on logout, and the schema's
+complexity limit. It exits non-zero if any of them misbehaves, so it also works as a
+post-deploy check.
+
+`bundle exec rspec` proves the code; `bin/smoke` proves the deployment.
+
+**About the ports.** `docker-compose.dev.yml` publishes PostgreSQL on **55432** and Redis
+on **56379**, not the usual 5432/6379. Those are very often already taken by another
+project, and a Rails app that quietly connects to somebody else's Redis is a bad
+afternoon. `POSTGRES_PORT` and `REDIS_PORT` override them, and `.env.example` already
+matches the defaults.
 
 `http://localhost:3000/sidekiq` shows the queues. It is mounted in **development only** —
 it has no authentication of its own, so exposing it in production would hand anyone the
@@ -103,7 +122,53 @@ The seeds create these accounts, all with the password `telehealth-demo-2026`:
 | `sam.patient@example.com` | patient |
 | `kai.patient@example.com` | patient (no phone on file) |
 
-### With Docker
+Each doctor gets ten slots starting three days out, plus one slot six hours out. Booking a
+far slot schedules the reminder with `perform_at` for 24 hours before; booking the near one
+takes the other branch and sends it immediately rather than scheduling into the past.
+
+### Looking at what actually happened
+
+The interesting behaviour is not all visible over HTTP. After a `bin/smoke` run:
+
+```bash
+# The audit trail: who read which chart, when, from where.
+bin/rails runner 'AuditLog.order(:id).each { |l| puts "#{l.created_at.iso8601}  #{l.user.email}  #{l.action}  #{l.resource_type}##{l.resource_id}  from #{l.ip_address}" }'
+#=> 2026-09-11T17:26:44Z  dr.reyes@example.com     medical_record.create  MedicalRecord#1  from 127.0.0.1
+#   2026-09-11T17:26:44Z  dr.reyes@example.com     medical_record.read    MedicalRecord#1  from 127.0.0.1
+#   2026-09-11T17:26:44Z  sam.patient@example.com  medical_record.read    MedicalRecord#1  from 127.0.0.1
+
+# PHI on disk versus PHI through the model.
+bin/rails runner 'r = MedicalRecord.first; puts "raw:   #{ActiveRecord::Base.connection.select_value("SELECT left(diagnosis,60) FROM medical_records WHERE id=#{r.id}")}"; puts "model: #{r.diagnosis}"'
+#=> raw:   {"p":"nrEeWPSS9qaTWaVp0zLBKSa9ejSsfA==","h":{"iv":"gw4yZs61p
+#   model: Essential hypertension
+
+# The jobs booking actually enqueued.
+bin/rails runner 'require "sidekiq/api"; Sidekiq::ScheduledSet.new.each { |j| puts "#{j.klass} #{j.args.inspect} queue=#{j.queue} at=#{j.at.utc.iso8601}" }'
+#=> AppointmentReminderWorker [6] queue=notifications at=2026-09-22T10:00:00Z
+#   BillingInvoiceWorker [6] queue=default at=2026-09-11T17:28:18Z
+```
+
+That second `BillingInvoiceWorker` entry is the timeout path doing its job: `.env.example`
+points `DJANGO_BILLING_URL` at a service that is not running, the invoice call gives up
+after the 2-second open timeout, and the booking is kept while the invoice is retried in
+the background. Point `DJANGO_BILLING_URL` at the real billing service and it disappears.
+
+### Trying the second factor
+
+```bash
+TOKEN=$(curl -sX POST http://localhost:3000/auth/login -H 'Content-Type: application/json' \
+  -d '{"user":{"email":"sam.patient@example.com","password":"telehealth-demo-2026"}}' \
+  | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+
+curl -sX POST http://localhost:3000/auth/2fa/setup -H "Authorization: Bearer $TOKEN"
+# scan the otpauth_uri with any authenticator app, or read the code out of the console:
+bin/rails runner 'puts ROTP::TOTP.new(User.find_by(email: "sam.patient@example.com").otp_secret).now'
+```
+
+Then follow [Two-factor](#two-factor-authentication) below. Logging in afterwards returns
+`202` and a challenge instead of a token — that is the point of it.
+
+### With the whole service in containers
 
 ```bash
 cp .env.example .env     # fill in the secrets; compose refuses to start without them
@@ -112,13 +177,12 @@ docker compose -f docker-compose.standalone.yml up --build
 
 Four containers with healthchecks: `api`, `sidekiq`, `postgres:16`, `redis:7`. Only `api`
 prepares the schema (`PREPARE_DATABASE=true`), so the two app containers never race to
-migrate.
+migrate. This runs in `RAILS_ENV=production`, so the demo seeds are deliberately skipped.
 
 `DJANGO_BILLING_URL` defaults to `http://billing:8000`. This file does **not** define a
 `billing` service — that is the sibling repository's container. On its own, invoice calls
-time out, and the API is built to survive exactly that: the appointment is kept and the
-invoice is retried in the background. To run both services together, put them on one
-network with the billing service named `billing`.
+time out, and the API is built to survive exactly that. To run both services together, put
+them on one network with the billing service named `billing`.
 
 ### Tests and lint
 

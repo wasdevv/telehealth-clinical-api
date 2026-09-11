@@ -1,7 +1,7 @@
 require "sidekiq"
 require "sidekiq-cron"
 
-redis_config = { url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0") }.freeze
+redis_config = { url: ENV["REDIS_URL"].presence || "redis://localhost:6379/0" }.freeze
 
 Sidekiq.configure_server do |config|
   config.redis = redis_config

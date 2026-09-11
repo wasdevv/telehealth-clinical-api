@@ -18,9 +18,11 @@ end
 if Rails.env.local?
   # Fixed, worthless, well-known values so `bin/rails c` and `rspec` work out of the
   # box. They are only reachable when RAILS_ENV is development or test.
+  # `.presence ||`, never `||`: a key that is present but blank — an empty line in a
+  # copied .env — must fall back like a missing one, not configure empty-key encryption.
   ActiveRecord::Encryption.configure(
-    primary_key: ENV.fetch("ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY", "development_primary_key_not_a_secret"),
-    deterministic_key: ENV.fetch("ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY", "development_deterministic_key_not_a_secret"),
-    key_derivation_salt: ENV.fetch("ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT", "development_salt_not_a_secret")
+    primary_key: ENV["ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"].presence || "development_primary_key_not_a_secret",
+    deterministic_key: ENV["ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY"].presence || "development_deterministic_key_not_a_secret",
+    key_derivation_salt: ENV["ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT"].presence || "development_salt_not_a_secret"
   )
 end

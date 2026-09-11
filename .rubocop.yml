@@ -35,3 +35,9 @@ Layout/LineLength:
 
 Rails/SkipsModelValidations:
   Enabled: false
+
+# `bin/rails db:seed` is run by a person at a terminal who needs to see what happened
+# and which demo password to use. Routing that to the log would make the task silent.
+Rails/Output:
+  Exclude:
+    - "db/seeds.rb"

@@ -35,15 +35,20 @@ patients = [
   end
 end
 
+# Slots start three days out so that booking one takes the representative path:
+# the reminder is scheduled with perform_at for 24 hours before the consultation.
 doctors.each do |doctor|
-  (1..10).each do |day|
+  (3..12).each do |day|
     start = (Date.current + day).in_time_zone.change(hour: 9) + (doctor.id % 3).hours
     Availability.find_or_create_by!(doctor: doctor, starts_at: start, ends_at: start + 30.minutes)
   end
+
+  # One slot inside the 24-hour window, so the other branch is demonstrable too:
+  # booking this one sends the reminder immediately instead of scheduling it in the past.
+  soon = 6.hours.from_now.change(min: 0, sec: 0) + (doctor.id % 3).hours
+  Availability.find_or_create_by!(doctor: doctor, starts_at: soon, ends_at: soon + 30.minutes)
 end
 
-Rails.logger.debug do
-  "Seeded #{User.count} users, #{doctors.size} doctors, #{patients.size} patients, #{Availability.count} slots."
-end
-Rails.logger.debug { "Every demo account uses the password: #{DEMO_PASSWORD}" }
-Rails.logger.debug { "Admin: #{admin.email}" }
+puts "Seeded #{User.count} users, #{doctors.size} doctors, #{patients.size} patients, #{Availability.count} slots."
+puts "Every demo account uses the password: #{DEMO_PASSWORD}"
+puts "Sign in as: #{admin.email} (admin), dr.reyes@example.com (doctor), sam.patient@example.com (patient)"

@@ -40,6 +40,10 @@ gem "tzinfo-data", platforms: %i[windows jruby]
 group :development, :test do
   gem "brakeman", require: false
   gem "debug", platforms: %i[mri windows], require: "debug/prelude"
+  # Makes the documented `cp .env.example .env` actually do something. Without it the
+  # app falls back to localhost defaults, which on a machine already running other
+  # projects means quietly connecting to somebody else's Redis.
+  gem "dotenv-rails", "~> 3.1"
   gem "factory_bot_rails", "~> 6.4"
   gem "rspec-rails", "~> 8.0"
   gem "rubocop-rails", require: false

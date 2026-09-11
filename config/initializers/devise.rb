@@ -17,14 +17,14 @@ Devise.setup do |config|
   # instead of Devise's default /users/auth/... .
   config.omniauth_path_prefix = "/auth"
   config.omniauth :google_oauth2,
-                  ENV.fetch("GOOGLE_CLIENT_ID", ""),
-                  ENV.fetch("GOOGLE_CLIENT_SECRET", ""),
+                  ENV["GOOGLE_CLIENT_ID"].to_s,
+                  ENV["GOOGLE_CLIENT_SECRET"].to_s,
                   scope: "email,profile",
                   prompt: "select_account"
 
   config.jwt do |jwt|
-    jwt.secret = ENV.fetch("DEVISE_JWT_SECRET_KEY") { Rails.application.secret_key_base }
-    jwt.expiration_time = ENV.fetch("JWT_EXPIRATION_SECONDS", 1.hour.to_i).to_i
+    jwt.secret = ENV["DEVISE_JWT_SECRET_KEY"].presence || Rails.application.secret_key_base
+    jwt.expiration_time = (ENV["JWT_EXPIRATION_SECONDS"].presence || 1.hour.to_i).to_i
 
     # Tokens are minted by the controllers (Users::SessionsController, TwoFactorController,
     # Users::OmniauthCallbacksController) rather than by matching request paths here. An
