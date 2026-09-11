@@ -1,8 +1,14 @@
-# DATABASE_URL overrides everything below and is what Docker Compose and CI use.
+# Local and CI runs point at PostgreSQL with the POSTGRES_* variables below, so the
+# test database name never gets overwritten by a stray DATABASE_URL. Production (and
+# anything else that hands us one connection string) uses DATABASE_URL.
 default: &default
   adapter: postgresql
   encoding: unicode
   pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+  port: <%= ENV.fetch("POSTGRES_PORT", 5432) %>
+  username: <%= ENV["POSTGRES_USER"] %>
+  password: <%= ENV["POSTGRES_PASSWORD"] %>
 
 development:
   <<: *default
@@ -14,4 +20,4 @@ test:
 
 production:
   <<: *default
-  url: <%= ENV["DATABASE_URL"] %>
+  url: <%= ENV.fetch("DATABASE_URL", nil) %>
