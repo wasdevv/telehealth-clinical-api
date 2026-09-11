@@ -8,6 +8,9 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    # Skipped, not failed, until a destination is configured. An unconfigured optional
+    # job should not paint the repository's checks red on every push.
+    if: vars.GITLAB_REPOSITORY != ''
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,8 +25,8 @@ jobs:
           GITLAB_REPOSITORY: ${{ vars.GITLAB_REPOSITORY }}
         run: |
           set -euo pipefail
-          if [ -z "${GITLAB_REPOSITORY}" ] || [ -z "${GITLAB_TOKEN}" ]; then
-            echo "GITLAB_REPOSITORY (variable) and GITLAB_TOKEN (secret) must both be set." >&2
+          if [ -z "${GITLAB_TOKEN}" ]; then
+            echo "GITLAB_REPOSITORY is set but the GITLAB_TOKEN secret is missing." >&2
             exit 1
           fi
           # The token is assembled inside the remote URL and never echoed. `set -x` is
