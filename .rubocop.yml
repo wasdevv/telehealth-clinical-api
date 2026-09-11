@@ -1,0 +1,36 @@
+plugins:
+  - rubocop-rails
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+  Exclude:
+    - "db/schema.rb"
+    - "bin/**/*"
+    - "vendor/**/*"
+    - "tmp/**/*"
+
+# Style choices this project does not argue about.
+Style/Documentation:
+  Enabled: false
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+    - "app/graphql/**/*"
+Metrics/MethodLength:
+  Max: 25
+Metrics/AbcSize:
+  Max: 30
+Metrics/ClassLength:
+  Max: 200
+Layout/LineLength:
+  Max: 130
+
+Rails/SkipsModelValidations:
+  Enabled: false

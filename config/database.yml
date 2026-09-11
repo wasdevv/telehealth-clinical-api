@@ -1,0 +1,17 @@
+# DATABASE_URL overrides everything below and is what Docker Compose and CI use.
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+
+development:
+  <<: *default
+  database: telehealth_clinical_api_development
+
+test:
+  <<: *default
+  database: telehealth_clinical_api_test
+
+production:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"] %>
